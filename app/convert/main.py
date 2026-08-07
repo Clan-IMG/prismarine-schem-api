@@ -67,16 +67,27 @@ def _block_state_to_string(entry: Compound) -> str:
     return f"{name}[{props}]"
 
 
-def _write_varint(value: int) -> bytes:
-    out = bytearray()
+def encode_varint(val: int) -> bytes:
+    """Minecraft-style VarInt (LEB128, 1-5 bytes) as required for Sponge v2 BlockData entries."""
+    buf = bytearray()
     while True:
-        byte = value & 0x7F
-        value >>= 7
-        if value:
-            out.append(byte | 0x80)
+        tobytes = val & 0x7F
+        val >>= 7
+        if val != 0:
+            buf.append(tobytes | 0x80)
         else:
-            out.append(byte)
-            return bytes(out)
+            buf.append(tobytes)
+            break
+    return bytes(buf)
+
+
+def _build_block_data(indices: list) -> ByteArray:
+    """Concatenate the VarInt-encoded palette index of every block, in Sponge's x/z/y iteration order."""
+    raw = bytearray()
+    for index in indices:
+        raw.extend(encode_varint(index))
+    # TAG_Byte_Array entries are signed in NBT/Java, so unsigned 0-255 bytes must wrap to -128..127
+    return ByteArray([b - 256 if b > 127 else b for b in raw])
 
 
 def _select_main_region(regions: Compound) -> Compound:
@@ -121,10 +132,6 @@ def convert_litematic_to_schem(data: bytes) -> bytes:
 
     indices = _unpack_block_states(block_states, bits_per_entry, volume)
 
-    block_data = bytearray()
-    for index in indices:
-        block_data.extend(_write_varint(index))
-
     data_version = int(root.get("MinecraftDataVersion", FALLBACK_DATA_VERSION))
 
     schem = Compound()
@@ -140,9 +147,7 @@ def convert_litematic_to_schem(data: bytes) -> bytes:
         palette_compound[block_state] = Int(palette_index)
     schem["PaletteMax"] = Int(len(palette))
     schem["Palette"] = palette_compound
-
-    signed_bytes = [b - 256 if b > 127 else b for b in block_data]
-    schem["BlockData"] = ByteArray(signed_bytes)
+    schem["BlockData"] = _build_block_data(indices)
 
     return _write_nbt_gzipped(schem)
 
