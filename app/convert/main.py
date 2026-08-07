@@ -5,7 +5,7 @@ import math
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from nbtlib import ByteArray, Compound, Int, Short
+from nbtlib import ByteArray, Compound, Int, IntArray, Short
 
 router = APIRouter(tags=["Convert"])
 
@@ -28,8 +28,9 @@ def _write_nbt_gzipped(root: Compound) -> bytes:
     from nbtlib import File as NbtFile
 
     buffer = io.BytesIO()
+    # FAWE/Sponge v1+v2 identify the format by the *name* of the root NBT tag, not a nested key
     with gzip.GzipFile(fileobj=buffer, mode="wb") as gz:
-        NbtFile(root).write(gz)
+        NbtFile(root, root_name="Schematic").write(gz)
     return buffer.getvalue()
 
 
@@ -132,6 +133,7 @@ def convert_litematic_to_schem(data: bytes) -> bytes:
     schem["Width"] = Short(width)
     schem["Height"] = Short(height)
     schem["Length"] = Short(length)
+    schem["Offset"] = IntArray([0, 0, 0])
 
     palette_compound = Compound()
     for palette_index, block_state in enumerate(palette):
