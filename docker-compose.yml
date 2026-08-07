@@ -1,0 +1,53 @@
+services:
+  api:
+    labels:
+      - traefik.docker.network=coolify
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      - API_TOKEN=${API_TOKEN}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+    networks:
+      - network
+      - coolify
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:latest
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+      - MARIADB_DATABASE=${MARIADB_DATABASE}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      network:
+        aliases:
+          - prismarine-schem-db
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      - PMA_HOST=${PMA_HOST:-prismarine-schem-db}
+      - PMA_PORT=${PMA_PORT:-3306}
+      - PMA_USER=${PMA_USER}
+      - PMA_PASSWORD=${PMA_PASSWORD}
+    depends_on:
+      - mariadb
+    networks:
+      - network
+    restart: unless-stopped
+
+networks:
+  network:
+    driver: bridge
+  coolify:
+    external: true
+
+volumes:
+  mysql_data:
